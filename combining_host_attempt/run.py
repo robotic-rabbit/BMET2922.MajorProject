@@ -1,54 +1,31 @@
-"""
-main.py - Wearable PPG System Host Application
-
-Original Author: Anirudha Praveen
-Date: 27 Oct 2026
-"""
-
+# In main.py
+from bluetooth_reciever import BluetoothReceiver
+from gui import GUI_System
 import queue
 import threading
-import time
-from bluetooth_reciever import run_bluetooth_client
-from gui import GUI_System
 
-BT_MAC = "B0:CB:D8:8E:B3:86"
-CHANNEL = 1
-
-
-def comms_thread_worker(mac, channel, pkt_queue, stop_event):
-    """Runs the verified socket client in the background thread."""
-    run_bluetooth_client(
-        mac_address=mac,
-        channel=channel,
-        packet_queue=pkt_queue,
-        stop_event=stop_event,
-        log_path="ppg_log.csv"
-    )
-
-
-def main():
-    print("Starting PPG Monitor Host Application")
-    print(f"Target ESP32 MAC: {BT_MAC}")
-
+def run():
     packet_queue = queue.Queue(maxsize=100)
     stop_event = threading.Event()
 
-    t = threading.Thread(
-        target=comms_thread_worker,
-        args=(BT_MAC, CHANNEL, packet_queue, stop_event),
-        daemon=True
+    # Create receiver instance
+    receiver = BluetoothReceiver(
+        mac_address="B0:CB:D8:8E:B3:86",
+        channel=1,
+        packet_queue=packet_queue,
+        stop_event=stop_event
     )
 
+    # Hand receiver.run directly to the background thread
+    t = threading.Thread(target=receiver.run, daemon=True)
     t.start()
 
     gui = GUI_System()
     gui.run(packet_queue=packet_queue)
 
-
     stop_event.set()
     t.join(timeout=1.0)
     print("[SYSTEM] Application shut down cleanly.")
 
-
 if __name__ == "__main__":
-    main()
+    run()

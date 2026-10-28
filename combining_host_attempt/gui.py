@@ -215,7 +215,8 @@ class GUI_System:
         
     def on_packet(self, packet):
         result = self.processor.process_packet(packet)
-        if result['adaptive_status'] == 'IGNORED':
+        if 'log_msg' in packet:
+            self.log(packet['log_msg'])
             return
 
         for event_msg in result['events']:

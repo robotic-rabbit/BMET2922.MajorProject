@@ -105,7 +105,7 @@ class BluetoothReceiver:
                 self.log(f"[HOST] Connecting directly to {self.mac_address}...")
                 try:
                     self.sock.connect((self.mac_address, self.channel))
-                    self.log("[HOST] >>> CONNECTED! Streaming live telemetry... <<<")
+                    self.log("Connection Successful")
 
                     for line in self._stream_lines(max_silence_s=4.0):
                         pkt = self.parse_line(line)
@@ -125,19 +125,15 @@ class BluetoothReceiver:
                             self.packet_queue.put(pkt)
 
                 except Exception as e:
-                    self.log(f"[HOST] >>> LINK LOST: {e} <<<")
-                    self.log("[HOST] Retrying connection in 2s...")
+                    self.log(f"Link Lost {e} <<<")
+                    self.log("Retrying connection in 1s")
                 finally:
                     if self.sock:
                         self.sock.close()
-                    time.sleep(2.0)
+                    time.sleep(1.0)
         finally:
             if log_file:
                 log_file.close()
                 self.log("[HOST] CSV log saved and closed.")
 
 
-# Backward-compatibility wrapper (so existing main.py doesn't break)
-def run_bluetooth_client(mac_address="B0:CB:D8:8E:B3:86", channel=1, packet_queue=None, stop_event=None, log_path="ppg_log.csv"):
-    client = BluetoothReceiver(mac_address, channel, packet_queue, stop_event, log_path)
-    client.run()

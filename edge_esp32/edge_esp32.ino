@@ -59,7 +59,7 @@ void setup() {
   pinMode(SENSOR_PIN, INPUT);
 
   // start the Serial interface (over USB)
-  Serial.begin(921600);
+  Serial.begin(230400);
   // a small delay to ensure that all messages are seen in the Serial Monitor.
   delay(1000);
   Serial.println("\nSCHEDULER\n");

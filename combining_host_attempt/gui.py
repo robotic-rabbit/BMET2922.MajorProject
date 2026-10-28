@@ -29,6 +29,29 @@ PLOT_DURATION = 10
 # GUI event-loop polling interval (milliseconds)
 GUI_CHECK = 100
 
+class SpectrumView:
+    """Live Frequency Spectrum (FFT) plot for researcher analysis."""
+    def setup(self, fig):
+        fig.clear()
+        self.ax = fig.add_subplot(111)
+        self.line, = self.ax.plot([], [], color='#8B5CF6', lw=1.5)
+        self.ax.set_title('Real-Time Cardiac Frequency Spectrum (0 - 4 Hz)')
+        self.ax.set_xlabel('Frequency (Hz)')
+        self.ax.set_ylabel('Magnitude (Spectral Power)')
+        self.ax.set_xlim(0.5, 3.5) # Focus on 30 - 210 BPM band
+        self.ax.grid(alpha=0.3)
+        fig.tight_layout()
+
+    def update(self, gui):
+        if len(gui.filtered_samples) < 5 * SAMPLE_RATE:
+            return
+        x = np.asarray(gui.filtered_samples)
+        x = x - np.mean(x)
+        spec = np.abs(np.fft.rfft(x * np.hanning(len(x)), n=2048))
+        freqs = np.fft.rfftfreq(2048, 1 / SAMPLE_RATE)
+
+        self.line.set_data(freqs, spec)
+        self.ax.set_ylim(0, max(spec[freqs <= 4.0]) * 1.1 + 1e-3)
 
 class WaveformView:
     """Manages the dual-axis Raw and Filtered PPG waveform plots."""
@@ -127,10 +150,18 @@ class GUI_System:
         self.lower_thresholds = deque(maxlen=180)
         self.upper_thresholds = deque(maxlen=180)
 
+        self.views = {
+            'Pulse Waveform': WaveformView(),
+            'BPM': BPMView(),
+            'Frequency Spectrum': SpectrumView()
+        }
+
+        self.current_view = self.views['Pulse Waveform']
+        self.current_view.setup(self.fig)
         self.last_adaptive_status = None
         left = [[sg.Canvas(key='-CANVAS-', size=(720, 400))],
                 [sg.Text('Graph Selection:'), sg.ButtonMenu('Select Graph', 
-                                                            ['Graphs',['Pulse Waveform', 'BPM']], 
+                                                            ['Graphs',['Pulse Waveform', 'BPM', 'Frequency Spectrum']], 
                                                             key='-GRAPH-')]]
         right = [[sg.Text('--.-', key='-BPM-', font=('Arial', 42), justification='center', expand_x=True)],
                 [sg.Text('Waiting for data', key='-STATUS-', font=('Arial', 18), justification='center', expand_x=True)],
@@ -145,12 +176,6 @@ class GUI_System:
 
         self.total_samples = 0
 
-        self.views = {
-            'Pulse Waveform': WaveformView(),
-            'BPM': BPMView()
-        }
-        self.current_view = self.views['Pulse Waveform']
-        self.current_view.setup(self.fig)
 
         self.log('GUI started')
         

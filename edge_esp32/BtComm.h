@@ -13,6 +13,7 @@ public:
 
     bool sendPacket(const char* str) override;
     bool sendPacket(const uint8_t* buffer, size_t length) override;
+    void disconnect() override;
 
 private:
     BluetoothSerial serialBT;

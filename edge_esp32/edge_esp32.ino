@@ -59,7 +59,7 @@ void setup() {
   pinMode(SENSOR_PIN, INPUT);
 
   // start the Serial interface (over USB)
-  Serial.begin(115200);
+  Serial.begin(230400);
   // a small delay to ensure that all messages are seen in the Serial Monitor.
   delay(1000);
   Serial.println("\nSCHEDULER\n");
@@ -74,18 +74,17 @@ const char* package(float bpm, const uint16_t* samples, size_t count, uint8_t bt
     static uint16_t packet_seq = 0;
     static char packet_buffer[320];
 
-    // 1. Header (Fixed width)
+    // Header (Fixed width)
     int offset = snprintf(packet_buffer, sizeof(packet_buffer), 
                           "SEQ:%05u,BPM:%05.1f,BTN:%02u,DATA:",
                           packet_seq++, bpm, btn_state);
 
-    // 2. 50 raw samples (each 4 digits + comma)
+    // 50 raw samples (each 4 digits + comma)
     for (size_t i = 0; i < count; i++) {
         offset += snprintf(packet_buffer + offset, sizeof(packet_buffer) - offset, 
                            "%04u,", samples[i]);
     }
 
-    // 3. Trailing newline
     if (offset > 0 && packet_buffer[offset - 1] == ',') {
         packet_buffer[offset - 1] = '\n';
         packet_buffer[offset] = '\0';
@@ -135,17 +134,21 @@ void loop() {
     }
 
     // CONNECTION STATUS LED
-    if (comm.isConnected()){
-      digitalWrite(LED_PIN_BTCom, HIGH);
-    }
-    else{
-      if ((tick1sec /5) %2 ==0){
+    if (switch_latch1){
+      if (comm.isConnected()){
         digitalWrite(LED_PIN_BTCom, HIGH);
+      } else {
+        if ((tick1sec /5) %2 ==0){
+          digitalWrite(LED_PIN_BTCom, HIGH);
+        }
+        else{
+          digitalWrite(LED_PIN_BTCom, LOW);
+        }
       }
-      else{
-        digitalWrite(LED_PIN_BTCom, LOW);
-      }
+    } else {
+      digitalWrite(LED_PIN_BTCom, LOW);
     }
+
     Serial.printf("Connection Status:%d\n", comm.isConnected());
 
     //NORMALIZED SERIAL MONITOR DISPLAY
@@ -153,20 +156,24 @@ void loop() {
     Serial.printf("PeakDetected:%d\n", sensorSwitch.state() * 200);
     Serial.printf("ButtonON:%d\n", switch1.state() * 200);
     Serial.printf("Threshold:%d\n", sensor_threshold / 20);
-    Serial.printf("BPM:%.1f\n", heart_rate); // <-- Works properly now that heart_rate is float
+    Serial.printf("BPM:%.1f\n", heart_rate);
     Serial.printf("LIMIT:%d\n", 200);
 
+    if (!switch_latch1 && comm.isConnected()) {
+        Serial.println("Streaming stopped by switch -> Disconnecting BT");
+        comm.disconnect();
+    }
+
     if (++tick1sec >= TICK_1SEC) {
-      // execute 1 second tasks
-      // for(int i = 0; i <= TICK_1SEC; i++)
-      // {
-      //   Serial.print(sensor_array[i]);
-      //   Serial.print(" ");
-      // }
-      if (switch_latch1){
-        comm.sendPacket(package(heart_rate, sensor_array, TICK_1SEC, switch_latch1));
+      if (switch_latch1 && comm.isConnected()) {
+          bool sent = comm.sendPacket(package(heart_rate, sensor_array, TICK_1SEC, switch_latch1));
+          Serial.printf("Packet Send Result: %s\n", sent ? "SUCCESS" : "FAILED_TO_SEND");
+          
+          if (!sent) {
+              Serial.println("Packet failed to transmit -> Dropping connection");
+              comm.disconnect();
+          }
       }
-      
       tick1sec = 0;
     }
   }

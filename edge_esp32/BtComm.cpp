@@ -55,7 +55,6 @@ void BtComm::update() {
 }
 
 bool BtComm::isConnected() const {
-    // Use the event-driven flag updated by sppCallback
     return connected;
 }
 
@@ -71,7 +70,7 @@ void BtComm::disconnect() {
 bool BtComm::sendPacket(const char* str) {
     if (!serialBT.hasClient() || !str) return false;
     size_t written = serialBT.print(str);
-    serialBT.flush(); // Waits for radio to push the frame out
+    serialBT.flush(); 
     return written > 0;
 }
 

@@ -32,7 +32,6 @@ PLOT_DURATION = 10
 GUI_CHECK = 100
 
 
-
 class WaveformView:
     """Manages the dual-axis Raw and Filtered PPG waveform plots."""
     def setup(self, fig):
@@ -176,7 +175,7 @@ class GUI_System:
                 self.set_status('DISCONNECTED')
 
     def set_graph_view(self, view_name):
-        """Switches the active plotting strategy cleanly."""
+        """Switches the active plotting strategy"""
         if view_name in self.views and self.views[view_name] != self.current_view:
             self.current_view = self.views[view_name]
             self.current_view.setup(self.fig)
@@ -191,21 +190,21 @@ class GUI_System:
             return
         self.status = status
         messages = {
-        'NORMAL': 'Pulse Normal',
-        'HIGH': 'Pulse High',
-        'LOW': 'Pulse Low',
-        'NO_PULSE': 'No Valid Pulse Detected',
-        'DISCONNECTED': 'System Disconnected',
-        'WAITING': 'Waiting for data'
+            'NORMAL': 'Pulse Normal',
+            'HIGH': 'Pulse High',
+            'LOW': 'Pulse Low',
+            'NO_PULSE': 'No Valid Pulse Detected',
+            'DISCONNECTED': 'System Disconnected',
+            'WAITING': 'Waiting for data'
         }
         self.log(messages[status])
         colors = {
-        'NORMAL': ('#1C663B', '#E6F3ED'),
-        'HIGH': ('#880000', '#F17D80'),
-        'LOW': ('#880000', '#F17D80'),
-        'NO_PULSE': ('#7A5000', '#FFE9B3'),
-        'DISCONNECTED': ('#7A5000', '#FFE9B3'),
-        'WAITING': ('#333333', '#F6F3EA')
+            'NORMAL': ('#1C663B', '#E6F3ED'),
+            'HIGH': ('#880000', '#F17D80'),
+            'LOW': ('#880000', '#F17D80'),
+            'NO_PULSE': ('#7A5000', '#FFE9B3'),
+            'DISCONNECTED': ('#7A5000', '#FFE9B3'),
+            'WAITING': ('#333333', '#F6F3EA')
         }
         fg,bg = colors[status]
         self.window['-STATUS-'].update(messages[status], text_color=fg, background_color=bg)
@@ -221,7 +220,6 @@ class GUI_System:
         if result['adaptive_status'] == 'IGNORED':
             return
 
-        # 1. Fire off any logs produced by the processor
         for event_msg in result['events']:
             self.log(event_msg)
 
@@ -235,7 +233,6 @@ class GUI_System:
 
         self.filtered_samples.extend(result['filtered_samples'])
 
-        # 3. Update BPM and UI labels
         current_time_s = self.total_samples / SAMPLE_RATE
         bpm = result['bpm']
         self.bpm_times.append(current_time_s)

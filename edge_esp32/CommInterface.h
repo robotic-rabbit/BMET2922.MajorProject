@@ -17,4 +17,5 @@ public:
     
     virtual bool sendPacket(const char* str) = 0;
     virtual bool sendPacket(const uint8_t* buffer, size_t length) = 0;
+    virtual void disconnect() = 0;
 };

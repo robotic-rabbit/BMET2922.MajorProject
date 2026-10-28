@@ -55,7 +55,17 @@ void BtComm::update() {
 }
 
 bool BtComm::isConnected() const {
-    return const_cast<BluetoothSerial&>(serialBT).hasClient();
+    // Use the event-driven flag updated by sppCallback
+    return connected;
+}
+
+void BtComm::disconnect() {
+    if (connected || serialBT.hasClient()) {
+        Serial.println("[BT] Forcing disconnect...");
+        serialBT.flush();
+        serialBT.disconnect();
+        connected = false;
+    }
 }
 
 bool BtComm::sendPacket(const char* str) {

@@ -59,7 +59,7 @@ void setup() {
   pinMode(SENSOR_PIN, INPUT);
 
   // start the Serial interface (over USB)
-  Serial.begin(115200);
+  Serial.begin(921600);
   // a small delay to ensure that all messages are seen in the Serial Monitor.
   delay(1000);
   Serial.println("\nSCHEDULER\n");
@@ -98,7 +98,7 @@ const char* package(float bpm, const uint16_t* samples, size_t count, uint8_t bt
 void loop() {
   comm.update(); // Keeps background connection state fresh
   if ((micros() - lastTickTime) > TICK_20MSEC) { //REQ:1
-    lastTickTime = micros();
+    lastTickTime += TICK_20MSEC();
 
     // BUTTON INPUT
     if (switch1.update(digitalRead(SWITCH_PIN))) {

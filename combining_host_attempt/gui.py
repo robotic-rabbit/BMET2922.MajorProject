@@ -45,9 +45,9 @@ class GUI_System:
         self.status = 'WAITING'
         self.start = time.monotonic()
         self.processor = PPGProcessor(
-        sample_rate=SAMPLE_RATE,
-        low_bpm=LOW_BPM,
-        high_bpm=HIGH_BPM
+            sample_rate=SAMPLE_RATE,
+            low_bpm=LOW_BPM,
+            high_bpm=HIGH_BPM
         )
         self.filtered_samples = deque(maxlen=SAMPLE_RATE * PLOT_DURATION)
         self.lower_thresholds = deque(maxlen=180)
@@ -105,7 +105,6 @@ class GUI_System:
         else:
             self.window['-CONNECTION-'].update('Connected' if status != 'WAITING' else 'Waiting for packets')
         
-    
     def on_packet(self, packet):
         result = self.processor.process_packet(packet)
         if result['adaptive_status'] == 'IGNORED':
@@ -140,8 +139,6 @@ class GUI_System:
         else:
             self.window['-BPM-'].update(f"{bpm:.1f}")
             self.set_status(result['fixed_status'])
-
-        
     
     def refresh(self):
         # Check for packet timeout
@@ -229,7 +226,6 @@ class GUI_System:
 
         self.fig.tight_layout()
         self.canvas.draw_idle()
-
         
     def run(self, packet_queue=None):
         next_refresh = time.monotonic()
@@ -241,7 +237,6 @@ class GUI_System:
                 if event == '-GRAPH-':
                     self.selected_graph = values['-GRAPH-']
 
-                # Drain queue without ever blocking the UI
                 if packet_queue is not None:
                     while not packet_queue.empty():
                         try:

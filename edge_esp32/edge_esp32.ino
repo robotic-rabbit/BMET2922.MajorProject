@@ -24,7 +24,7 @@ static BtComm comm;
 
 // SWITCH
 Switch switch1(1, 5); 
-bool switch_latch1 = false;
+bool switch_latch1 = true;
 
 // SENSOR
 uint16_t sensor_reading; // 0-4095 ppg readings

@@ -64,20 +64,23 @@ class PPGProcessor:
         self.last_sequence = None
         self.last_result = None
         self.deviation_run = 0
+        self._had_pulse = True
+        self._last_adaptive_status = None
 
     def _finish(self, seq, packet, filtered, bpm, device_bpm, host_bpm,
-                lower, upper, adaptive_status, fixed_status):
+                lower, upper, adaptive_status, fixed_status, events):
         result = {
             'sequence': seq,
             'bpm': bpm,
             'device_bpm': device_bpm,
             'host_bpm': host_bpm,
             'samples': list(packet['samples']),
-            'filtered_samples': filtered.tolist(),
+            'filtered_samples': filtered.tolist() if hasattr(filtered, 'tolist') else list(filtered),
             'lower_threshold': lower,
             'upper_threshold': upper,
             'adaptive_status': adaptive_status,
             'fixed_status': fixed_status,
+            'events': events,  # List of string messages for the UI log
         }
         if 'btn' in packet:
             result['btn'] = packet['btn']
@@ -85,71 +88,86 @@ class PPGProcessor:
         return result
 
     def process_packet(self, packet):
-        """Return GUI-ready fields plus filtered samples and adaptive limits.
+        events = []
 
-        Does not mutate the input. Duplicate / out-of-order packets return the
-        previous result unchanged. A reading with no usable pulse returns
-        bpm=None and status 'NO_PULSE' instead of raising.
-        Returns: sequence, bpm, device_bpm, host_bpm, samples, btn (if present),
-                 filtered_samples, lower_threshold, upper_threshold,
-                 adaptive_status, fixed_status.
-        """
+        # 1. Key extraction & normalization
         if 'sequence' in packet and 'bpm' in packet:
             sequence, device_bpm = packet['sequence'], packet['bpm']
         elif 'seq' in packet and 'pulse' in packet:
             sequence, device_bpm = packet['seq'], packet['pulse']
         else:
-            raise KeyError('Expected sequence/bpm or seq/pulse packet keys')
+            events.append("Error: Packet missing sequence or bpm keys")
+            return {'events': events, 'adaptive_status': 'IGNORED'}
+
         seq = int(sequence)
 
+        # 2. Convert and validate the raw sample array
         raw = np.asarray(packet['samples'], dtype=float)
         if raw.ndim != 1 or len(raw) != self.sample_rate:
-            raise ValueError(f'Expected exactly {self.sample_rate} PPG samples')
-        if not np.all(np.isfinite(raw)):
-            raise ValueError('PPG samples must be finite numbers')
+            events.append(f"Invalid packet: expected {self.sample_rate} samples, got {len(raw)}")
+            return {'events': events, 'adaptive_status': 'IGNORED'}
 
-        # Sequence handling (only after the packet has been validated)
+        if not np.all(np.isfinite(raw)):
+            events.append("Invalid packet: samples contain non-finite numbers")
+            return {'events': events, 'adaptive_status': 'IGNORED'}
+
+        # 3. Sequence / gap handling
         if self.last_sequence is not None:
             gap = (seq - self.last_sequence - 1) & 0xFFFF
-            if gap >= 0x8000:                  # duplicate / out of order
-                return self.last_result
-            if gap > 0:                        # lost data: don't filter across the hole
+            if gap >= 0x8000:
+                events.append("Duplicate or out-of-order packet ignored")
+                return {'events': events, 'adaptive_status': 'IGNORED'}
+            if gap > 0:
+                events.append(f"Packet sequence discontinuity: lost {gap} packets")
                 self.filter_state = None
                 self.window.clear()
         self.last_sequence = seq
 
-        # The device sends 0 until it has a rate: that is "no reading", not an error
+        # 4. Parse device BPM
         try:
             device_bpm = float(device_bpm)
         except (TypeError, ValueError):
             device_bpm = float('nan')
         bpm = device_bpm if (math.isfinite(device_bpm) and device_bpm > 0) else None
 
+        # 5. Filter the signal with Butterworth bandpass
         if self.filter_state is None:
             self.filter_state = sosfilt_zi(self.sos) * raw[0]
         filtered, self.filter_state = sosfilt(self.sos, raw, zi=self.filter_state)
         self.window.extend(filtered)
 
+        # 6. Host FFT estimation if window has at least 5s of data
         host_bpm = None
         if len(self.window) >= 5 * self.sample_rate:
             x = np.asarray(self.window)
             if np.ptp(np.percentile(x, [2, 98])) < self.min_amplitude:
-                bpm = None                     # flat signal: sensor not on a finger
+                bpm = None  # Flat signal / sensor off finger
             else:
                 x = x - x.mean()
                 spec = np.abs(np.fft.rfft(x * np.hanning(len(x)), n=4096))
                 f = np.fft.rfftfreq(4096, 1 / self.sample_rate)
                 band = (f >= 40 / 60) & (f <= 200 / 60)
                 host_bpm = float(60 * f[band][np.argmax(spec[band])])
-                bpm = host_bpm                 # used for limits, status and the result
+                bpm = host_bpm
 
+        # 7. Check pulse presence & generate event on edge trigger
         if bpm is None:
+            if getattr(self, '_had_pulse', True):
+                events.append("Warning: No usable pulse detected")
+                self._had_pulse = False
             self.deviation_run = 0
             return self._finish(seq, packet, filtered, None, device_bpm, None,
-                                None, None, 'NO_PULSE', 'NO_PULSE')
+                                None, None, 'NO_PULSE', 'NO_PULSE', events)
 
+        if not getattr(self, '_had_pulse', True):
+            events.append("Pulse signal restored")
+            self._had_pulse = True
+
+        # 8. Fixed alarms
         fixed_status = ('LOW' if bpm < self.low_bpm else
                         'HIGH' if bpm > self.high_bpm else 'NORMAL')
+
+        # 9. Adaptive baseline tracking
         lower = upper = None
         if fixed_status == 'NORMAL':
             self.recent.append(bpm)
@@ -172,17 +190,28 @@ class PPGProcessor:
                 if fixed_status == 'NORMAL':
                     self.baseline.append(bpm)
 
+        # 10. Adaptive status change events
+        prev_adaptive = getattr(self, '_last_adaptive_status', None)
+        if adaptive_status != prev_adaptive:
+            if adaptive_status == 'HIGH_DEVIATION':
+                events.append(f"Warning: BPM ({bpm:.1f}) elevated above baseline")
+            elif adaptive_status == 'LOW_DEVIATION':
+                events.append(f"Warning: BPM ({bpm:.1f}) dropped below baseline")
+            elif adaptive_status == 'NORMAL' and prev_adaptive in ('HIGH_DEVIATION', 'LOW_DEVIATION'):
+                events.append("Adaptive warning cleared: BPM returned to baseline")
+            self._last_adaptive_status = adaptive_status
+
         if adaptive_status.endswith('DEVIATION') and fixed_status == 'NORMAL':
             self.deviation_run += 1
-            if self.deviation_run >= self.rebaseline_after:   # sustained shift = new normal
+            if self.deviation_run >= self.rebaseline_after:
                 self.baseline = deque(self.recent, maxlen=self.baseline.maxlen)
                 self.deviation_run = 0
+                events.append("Sustained deviation: Baseline recalibrated")
         else:
             self.deviation_run = 0
 
         return self._finish(seq, packet, filtered, bpm, device_bpm, host_bpm,
-                            lower, upper, adaptive_status, fixed_status)
-
+                            lower, upper, adaptive_status, fixed_status, events)
 
 if __name__ == '__main__':
     processor = PPGProcessor()

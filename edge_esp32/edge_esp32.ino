@@ -96,7 +96,7 @@ const char* package(float bpm, const uint16_t* samples, size_t count, uint8_t bt
 void loop() {
   comm.update(); // Keeps background connection state fresh
   if ((micros() - lastTickTime) > TICK_20MSEC) { //REQ:1
-    lastTickTime = micros();
+    lastTickTime += TICK_20MSEC;
 
     // BUTTON INPUT
     if (switch1.update(digitalRead(SWITCH_PIN))) {

@@ -8,7 +8,7 @@ Date: 27 Oct 2026
 import queue
 import threading
 import time
-from ppg_host import run_bluetooth_client
+from bluetooth_reciever import run_bluetooth_client
 from gui import GUI_System
 
 BT_MAC = "B0:CB:D8:8E:B3:86"

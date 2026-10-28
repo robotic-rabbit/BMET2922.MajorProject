@@ -9,7 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk 
 from collections import deque
 from datetime import datetime
-from signal_processing_2 import PPGProcessor 
+from signal_processing import PPGProcessor 
 #from config import LOW_BPM, HIGH_BPM, PACKET_TIMEOUT, SAMPLE_RATE, PLOT_DURATION, GUI_CHECK  
 
 port_num ="COM5"

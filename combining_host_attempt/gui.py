@@ -10,10 +10,10 @@ import tkinter as tk
 from collections import deque
 from datetime import datetime
 from signal_processing import PPGProcessor 
-#from config import LOW_BPM, HIGH_BPM, PACKET_TIMEOUT, SAMPLE_RATE, PLOT_DURATION, GUI_CHECK  
 
 port_num ="COM5"
 baud_rate = 115200
+
 # Pulse rate warning thresholds (BPM)
 LOW_BPM = 50
 HIGH_BPM = 120
@@ -286,7 +286,7 @@ class GUI_System:
 
         
     def run(self, packet_source=None):
-        """packet_source is an optional callable returning one decoded packet or None."""
+        """packet_source is an optional callable returning one decoded packet or None.""" # why is it optional
         next_refresh = time.monotonic()
         try:
             while True:

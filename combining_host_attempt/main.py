@@ -33,7 +33,6 @@ def main():
     packet_queue = queue.Queue(maxsize=100)
     stop_event = threading.Event()
 
-    # 1. Start Bluetooth socket worker in background thread
     t = threading.Thread(
         target=comms_thread_worker,
         args=(BT_MAC, CHANNEL, packet_queue, stop_event),
@@ -42,12 +41,10 @@ def main():
 
     t.start()
 
-    # 2. Launch GUI on main thread
     gui = GUI_System()
     gui.run(packet_source=packet_queue.get)
 
 
-    # 3. Clean up
     stop_event.set()
     t.join(timeout=1.0)
     print("[SYSTEM] Application shut down cleanly.")

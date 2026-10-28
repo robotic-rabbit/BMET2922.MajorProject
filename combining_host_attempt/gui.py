@@ -12,8 +12,6 @@ from collections import deque
 from datetime import datetime
 from signal_processing import PPGProcessor 
 
-port_num ="COM5"
-baud_rate = 115200
 
 # Pulse rate warning thresholds (BPM)
 LOW_BPM = 50
@@ -111,7 +109,7 @@ class GUI_System:
     def __init__(self):
         sg.theme('LightGrey2')
         self.fig = Figure(figsize=(7.3, 4.1), dpi=100)
-        #self.ax = self.fig.add_subplot(111)
+        # self.ax = self.fig.add_subplot(111)
         self.times = deque(maxlen=SAMPLE_RATE * PLOT_DURATION) #deque for storing PPG times
         self.samples = deque(maxlen=SAMPLE_RATE * PLOT_DURATION) #deque for storing PPG readings 
         self.bpm_times = deque(maxlen=180) #deque for storing BPM times

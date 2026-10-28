@@ -54,7 +54,7 @@ def parse_line(raw_line: str):
     }
 
 
-def _stream_lines(sock: socket.socket, stop_event, max_silence_s=4.0):
+def _stream_lines(sock: socket.socket, stop_event, max_silence_s=5.0):
     """
     Yields newline-terminated text lines from the socket.
     Raises TimeoutError if no data is received within max_silence_s,

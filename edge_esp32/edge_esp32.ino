@@ -31,6 +31,11 @@ uint16_t sensor_reading; // 0-4095 ppg readings
 uint16_t sensor_threshold = 2000; // TODO: implement adaptive threshold
 Switch sensorSwitch(2, 1); // using same switch library for sensor maybe rename this its confusing
 
+// ADAPTIVE THRESHOLD STATE
+float ppg_baseline = 2000.0f;  // Tracks slow DC drift
+float ppg_amplitude = 100.0f;  // Tracks average pulse peak height
+const float ADAPTIVE_ALPHA = 0.03f; // Adaptation rate (~0.7s time constant at 50Hz)
+
 // DATA
 unsigned long last_rising_edge;
 unsigned long current_rising_edge;
@@ -112,13 +117,31 @@ void loop() {
     sensor_reading = analogRead(SENSOR_PIN);
     sensor_array[tick1sec] = sensor_reading;
 
-    // SENSOR THRESHOLD & DEBOUNCE
-    if (sensorSwitch.update(sensor_reading>sensor_threshold)){
-      if (sensorSwitch.state()){
+    // 1. ADAPTIVE THRESHOLD COMPUTATION
+    // Track DC baseline via low-pass filter
+    ppg_baseline += ADAPTIVE_ALPHA * ((float)sensor_reading - ppg_baseline);
+
+
+    // LOW PASS FILTER DOESN'T HELP PERFORMANCE ( )
+    // // Track AC pulsatile amplitude (absolute deviation from baseline)
+    // float instantaneous_diff = fabsf((float)sensor_reading - ppg_baseline);
+    // ppg_amplitude += ADAPTIVE_ALPHA * (instantaneous_diff - ppg_amplitude);
+
+    // // Place threshold halfway up the pulse wave (Baseline + 50% of pulse amplitude)
+    // if (ppg_amplitude > 50.0f) {
+    //     sensor_threshold = (uint16_t)(ppg_baseline + (ppg_amplitude * 0.5f));
+    // } else {
+    //     sensor_threshold = (uint16_t)(ppg_baseline + 30.0f);
+    // }
+
+    // 2. SENSOR THRESHOLD & DEBOUNCE
+    if (sensorSwitch.update(sensor_reading > sensor_threshold)) {
+      if (sensorSwitch.state()) {
         last_rising_edge = current_rising_edge;
         current_rising_edge = millis();
       }
     }
+
     // BPM CALCULATION
     interbeat_interval = current_rising_edge - last_rising_edge; // in millis
     if (interbeat_interval >= 250 && interbeat_interval <= 2000) {
@@ -126,11 +149,15 @@ void loop() {
     }
 
     // HEART RATE LED
-    if (sensorSwitch.state()){
-      digitalWrite(LED_PIN_HR, HIGH);
-    }
-    else{
-      digitalWrite(LED_PIN_HR, LOW);
+    if (heart_rate>250 || heart_rate <30){
+      digitalWrite(LED_PIN_HR,HIGH);
+    } else {
+      if (sensorSwitch.state()){
+        digitalWrite(LED_PIN_HR, HIGH);
+      }
+      else{
+        digitalWrite(LED_PIN_HR, LOW);
+      }
     }
 
     // CONNECTION STATUS LED

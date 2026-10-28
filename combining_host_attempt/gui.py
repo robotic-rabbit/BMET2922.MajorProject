@@ -108,15 +108,6 @@ class GUI_System:
     def on_packet(self, packet):
         """Process an incoming packet and update GUI data."""
 
-        # Convert packet keys if needed
-        if 'sequence' not in packet and 'seq' in packet:
-            packet = {
-                'sequence': packet['seq'],
-                'bpm': packet['pulse'],
-                'btn': packet.get('btn', 0),
-                'samples': packet['samples']
-            }
-
         if len(packet['samples']) != SAMPLE_RATE:
             self.log('Invalid packet: expected 50 samples')
             return

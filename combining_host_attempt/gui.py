@@ -1,4 +1,5 @@
 import FreeSimpleGUI as sg 
+import queue
 import time 
 import serial 
 import threading 
@@ -106,85 +107,39 @@ class GUI_System:
         
     
     def on_packet(self, packet):
-        """Process an incoming packet and update GUI data."""
-
-        if len(packet['samples']) != SAMPLE_RATE:
-            self.log('Invalid packet: expected 50 samples')
+        result = self.processor.process_packet(packet)
+        if result['adaptive_status'] == 'IGNORED':
             return
 
-        sequence = int(packet['sequence'])
+        # 1. Fire off any logs produced by the processor
+        for event_msg in result['events']:
+            self.log(event_msg)
 
-        # Reject duplicate or older packets
-        if self.last_sequence is not None:
-            gap = (sequence - self.last_sequence - 1) % 65536
-
-            if gap >= 32768:
-                self.log('Duplicate or out-of-order packet ignored')
-                return
-
-            if gap > 0:
-                self.log('Packet sequence discontinuity')
-
-        # Apply signal processing
-        result = self.processor.process_packet(packet)
-
-        self.last_sequence = sequence
+        # 2. Update rolling plot buffers
         self.last_packet = time.monotonic()
-
         now = self.last_packet - self.start
+        
+        dt = 1.0 / SAMPLE_RATE
+        t_start = now - (len(packet['samples']) * dt)
+        for i, s in enumerate(packet['samples']):
+            self.times.append(t_start + i * dt)
+            self.samples.append(s)
 
-        # Store raw samples and timestamps
-        for i, sample in enumerate(packet['samples']):
-            self.times.append(
-                now - (SAMPLE_RATE - 1 - i) / SAMPLE_RATE
-            )
-            self.samples.append(sample)
-
-        # Store filtered waveform
         self.filtered_samples.extend(result['filtered_samples'])
 
-        # Store calculated BPM and adaptive thresholds
+        # 3. Update BPM and UI labels
         bpm = result['bpm']
         self.bpm_times.append(now)
         self.bpm.append(bpm if bpm is not None else np.nan)
+        self.lower_thresholds.append(result['lower_threshold'] or np.nan)
+        self.upper_thresholds.append(result['upper_threshold'] or np.nan)
 
-        lower = result['lower_threshold']
-        upper = result['upper_threshold']
-
-        self.lower_thresholds.append(
-            lower if lower is not None else np.nan
-        )
-        self.upper_thresholds.append(
-            upper if upper is not None else np.nan
-        )
-
-        # Handle unusable pulse signal
         if bpm is None:
             self.window['-BPM-'].update('---')
             self.set_status('NO_PULSE')
         else:
-            self.window['-BPM-'].update(f'{bpm:.1f}')
+            self.window['-BPM-'].update(f"{bpm:.1f}")
             self.set_status(result['fixed_status'])
-
-        # Adaptive threshold warnings
-        adaptive_status = result['adaptive_status']
-
-        if adaptive_status != self.last_adaptive_status:
-
-            if adaptive_status == 'HIGH_DEVIATION':
-                self.log('Warning: BPM above recent baseline')
-
-            elif adaptive_status == 'LOW_DEVIATION':
-                self.log('Warning: BPM below recent baseline')
-
-            elif (
-                adaptive_status == 'NORMAL'
-                and self.last_adaptive_status in
-                ('HIGH_DEVIATION', 'LOW_DEVIATION')
-            ):
-                self.log('Adaptive warning cleared')
-
-        self.last_adaptive_status = adaptive_status
 
         
     

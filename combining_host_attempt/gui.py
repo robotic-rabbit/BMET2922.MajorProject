@@ -285,35 +285,27 @@ class GUI_System:
         self.canvas.draw_idle()
 
         
-    def run(self, packet_source=None):
-        """packet_source is an optional callable returning one decoded packet or None.""" # why is it optional
+    def run(self, packet_queue=None):
         next_refresh = time.monotonic()
         try:
             while True:
-                event, values= self.window.read(timeout=GUI_CHECK)
+                event, values = self.window.read(timeout=GUI_CHECK)
                 if event == sg.WIN_CLOSED:
                     break
                 if event == '-GRAPH-':
                     self.selected_graph = values['-GRAPH-']
-                if packet_source is not None:
-                    for _ in range(10):  # limit work to keep GUI responsive
-                        packet = packet_source()
-                        if packet is None:
+
+                # Drain queue without ever blocking the UI
+                if packet_queue is not None:
+                    while not packet_queue.empty():
+                        try:
+                            packet = packet_queue.get_nowait()
+                            self.on_packet(packet)
+                        except queue.Empty:
                             break
-                        self.on_packet(packet)
+
                 if time.monotonic() >= next_refresh:
                     self.refresh()
                     next_refresh = time.monotonic() + 0.25
         finally:
             self.window.close()
-
-
-
-
-
-
-
-
-
-
-

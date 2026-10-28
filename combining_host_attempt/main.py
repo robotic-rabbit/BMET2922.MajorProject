@@ -42,7 +42,7 @@ def main():
     t.start()
 
     gui = GUI_System()
-    gui.run(packet_source=packet_queue.get)
+    gui.run(packet_queue=packet_queue)
 
 
     stop_event.set()

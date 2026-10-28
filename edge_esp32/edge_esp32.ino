@@ -14,10 +14,9 @@
 #include "BtComm.h"
 static BtComm comm;
 
-#include "esp_bt.h"  
-
 ///////// PINS
-#define LED_PIN 32
+#define LED_PIN_HR 32
+#define LED_PIN_BTCom 27
 #define SWITCH_PIN 33
 #define SENSOR_PIN 25
 
@@ -54,7 +53,8 @@ uint16_t tick1sec = 0;
 
 void setup() {
   // initialize pin modes
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(LED_PIN_HR, OUTPUT);
+  pinMode(LED_PIN_BTCom, OUTPUT);
   pinMode(SWITCH_PIN, INPUT);
   pinMode(SENSOR_PIN, INPUT);
 
@@ -66,7 +66,6 @@ void setup() {
 
   // start bluetooth connection
   comm.begin("ESP32_PPG");
-  esp_bt_sleep_disable();
 
   lastTickTime = micros();
 }
@@ -127,7 +126,29 @@ void loop() {
       heart_rate = 60000.0f / (float)interbeat_interval; // Proper 1dp float
     }
 
-    // NORMALIZED SERIAL MONITOR DISPLAY
+    // HEART RATE LED
+    if (sensorSwitch.state()){
+      digitalWrite(LED_PIN_HR, HIGH);
+    }
+    else{
+      digitalWrite(LED_PIN_HR, LOW);
+    }
+
+    // CONNECTION STATUS LED
+    if (comm.isConnected()){
+      digitalWrite(LED_PIN_BTCom, HIGH);
+    }
+    else{
+      if ((tick1sec /5) %2 ==0){
+        digitalWrite(LED_PIN_BTCom, HIGH);
+      }
+      else{
+        digitalWrite(LED_PIN_BTCom, LOW);
+      }
+    }
+    Serial.printf("Connection Status:%d\n", comm.isConnected());
+
+    //NORMALIZED SERIAL MONITOR DISPLAY
     Serial.printf("RawWave:%d\n", sensor_reading / 20);
     Serial.printf("PeakDetected:%d\n", sensorSwitch.state() * 200);
     Serial.printf("ButtonON:%d\n", switch1.state() * 200);
@@ -142,10 +163,10 @@ void loop() {
       //   Serial.print(sensor_array[i]);
       //   Serial.print(" ");
       // }
-
-      bool sent = comm.sendPacket(package(heart_rate, sensor_array, TICK_1SEC, switch_latch1));
-
-      Serial.printf("Packet Send Result: %s\n", sent ? "SUCCESS" : "FAILED_TO_SEND");
+      if (switch_latch1){
+        comm.sendPacket(package(heart_rate, sensor_array, TICK_1SEC, switch_latch1));
+      }
+      
       tick1sec = 0;
     }
   }

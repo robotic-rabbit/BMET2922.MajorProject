@@ -128,6 +128,51 @@ class BPMView:
         self.ax.relim()
         self.ax.autoscale_view(scalex=False, scaley=True)
 
+class PhaseSpaceView:
+    """
+    Reconstructs the 2D Phase Space Attractor of the cardiac cycle
+    using Time-Delay Embedding (Takens' Theorem): x(t) vs x(t - tau).
+    """
+    def __init__(self, delay_samples=7):
+        self.tau = delay_samples  # 7 samples @ 50Hz = 140 ms delay
+
+    def setup(self, fig):
+        fig.clear()
+        self.ax = fig.add_subplot(111)
+
+        # Plot line for the phase portrait
+        self.line, = self.ax.plot([], [], color='#06B6D4', lw=1.2, alpha=0.85)
+
+        self.ax.set_title(r"Cardiac Phase-Space Attractor: $x(t)$ vs $x(t - \tau)$", fontsize=11)
+        self.ax.set_xlabel(r"$x(t - \tau)$ (Delayed Signal)", fontsize=9)
+        self.ax.set_ylabel(r"$x(t)$ (Current Signal)", fontsize=9)
+        self.ax.grid(alpha=0.25)
+        fig.tight_layout()
+
+    def update(self, gui):
+        # We need at least a few seconds of data to trace the attractor loops
+        if len(gui.filtered_samples) < 2 * SAMPLE_RATE:
+            return
+
+        # Take the most recent ~4 seconds of filtered samples for a clear trajectory
+        recent_window = 4 * SAMPLE_RATE
+        raw_filt = list(gui.filtered_samples)[-recent_window:]
+
+        # Create time-delay vectors: x(t) vs x(t - tau)
+        x_delayed = np.array(raw_filt[:-self.tau])
+        x_current = np.array(raw_filt[self.tau:])
+
+        # Update the attractor trajectory
+        self.line.set_data(x_delayed, x_current)
+
+        # Dynamic scaling to keep the attractor centered in the frame
+        all_vals = np.concatenate([x_delayed, x_current])
+        v_min, v_max = np.min(all_vals), np.max(all_vals)
+        pad = max((v_max - v_min) * 0.15, 1.0)
+
+        self.ax.set_xlim(v_min - pad, v_max + pad)
+        self.ax.set_ylim(v_min - pad, v_max + pad)
+
 class GUI_System: 
     def __init__(self):
         sg.theme('LightGrey2')
@@ -149,11 +194,13 @@ class GUI_System:
         self.filtered_samples = deque(maxlen=SAMPLE_RATE * PLOT_DURATION)
         self.lower_thresholds = deque(maxlen=180)
         self.upper_thresholds = deque(maxlen=180)
+        self.time = time.monotonic()
 
         self.views = {
             'Pulse Waveform': WaveformView(),
             'BPM': BPMView(),
-            'Frequency Spectrum': SpectrumView()
+            'Frequency Spectrum': SpectrumView(),
+            'Chaos Control': PhaseSpaceView()
         }
 
         self.current_view = self.views['Pulse Waveform']
@@ -161,7 +208,7 @@ class GUI_System:
         self.last_adaptive_status = None
         left = [[sg.Canvas(key='-CANVAS-', size=(720, 400))],
                 [sg.Text('Graph Selection:'), sg.ButtonMenu('Select Graph', 
-                                                            ['Graphs',['Pulse Waveform', 'BPM', 'Frequency Spectrum']], 
+                                                            ['Graphs',['Pulse Waveform', 'BPM', 'Frequency Spectrum', 'Chaos Control']], 
                                                             key='-GRAPH-')]]
         right = [[sg.Text('--.-', key='-BPM-', font=('Arial', 42), justification='center', expand_x=True)],
                 [sg.Text('Waiting for data', key='-STATUS-', font=('Arial', 18), justification='center', expand_x=True)],
@@ -273,12 +320,14 @@ class GUI_System:
     
     def refresh(self):
         """Fast render tick: checks timeouts and delegates drawing to the active view."""
+        # self.time = time.monotonic()
         self.check_watchdog()
 
         # Delegate drawing to whatever view is currently active
         self.current_view.update(self)
 
         self.canvas.draw_idle()
+        # self.log(time.monotonic()-self.time)
         
     def run(self, packet_queue=None):
         next_refresh = time.monotonic()

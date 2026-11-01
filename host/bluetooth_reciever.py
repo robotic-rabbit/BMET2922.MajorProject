@@ -68,6 +68,7 @@ class BluetoothReceiver:
                 chunk = self.sock.recv(1024).decode("utf-8", errors="ignore")
             except (socket.timeout, TimeoutError):
                 if time.monotonic() - last_received > max_silence_s:
+                    self.log(f"No telemetry received for {max_silence_s}s (Device powered off)")
                     raise TimeoutError(f"No telemetry received for {max_silence_s}s (Device powered off)")
                 continue
 

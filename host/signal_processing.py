@@ -19,7 +19,6 @@ import math
 import numpy as np
 from scipy.signal import butter, sosfilt, sosfilt_zi
 
-
 class PPGProcessor:
     """Process consecutive packets, retaining filter and BPM history."""
 

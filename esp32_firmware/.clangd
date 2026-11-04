@@ -1,0 +1,8 @@
+CompileFlags:
+  Add:
+    - "-D__GLIBC_USE(x)=0"
+  BuiltinHeaders: QueryDriver
+
+Diagnostics:
+  Suppress:
+    - "pp_expr_bad_token_lparen"

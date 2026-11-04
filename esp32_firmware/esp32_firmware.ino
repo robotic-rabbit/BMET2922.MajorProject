@@ -10,7 +10,6 @@
 // #include "freertos/ringbuf.h"
 
 // BLUETOOTH LIBRARIES
-#include "CommInterface.h"
 #include "BtComm.h"
 static BtComm comm;
 

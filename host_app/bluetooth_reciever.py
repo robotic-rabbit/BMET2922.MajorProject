@@ -12,7 +12,14 @@ EXPECTED_PACKET_LENGTH = 281  # 281 characters without trailing newline
 
 
 class BluetoothReceiver:
-    def __init__(self, mac_address="B0:CB:D8:8E:B3:86", channel=1, packet_queue=None, stop_event=None, log_path="ppg_log.csv"):
+    def __init__(
+        self,
+        mac_address="B0:CB:D8:8E:B3:86",
+        channel=1,
+        packet_queue=None,
+        stop_event=None,
+        log_path="ppg_log.csv",
+    ):
         self.mac_address = mac_address
         self.channel = channel
         self.packet_queue = packet_queue
@@ -24,7 +31,7 @@ class BluetoothReceiver:
         """Prints to terminal and transparently forwards log events to the GUI."""
         print(message)
         if self.packet_queue is not None and not self.packet_queue.full():
-            self.packet_queue.put({'log_msg': message})
+            self.packet_queue.put({"log_msg": message})
 
     def parse_line(self, raw_line: str):
         """Parses and validates a telemetry string into a packet dictionary."""
@@ -68,8 +75,12 @@ class BluetoothReceiver:
                 chunk = self.sock.recv(1024).decode("utf-8", errors="ignore")
             except (socket.timeout, TimeoutError):
                 if time.monotonic() - last_received > max_silence_s:
-                    self.log(f"No telemetry received for {max_silence_s}s (Device powered off)")
-                    raise TimeoutError(f"No telemetry received for {max_silence_s}s (Device powered off)")
+                    self.log(
+                        f"No telemetry received for {max_silence_s}s (Device powered off)"
+                    )
+                    raise TimeoutError(
+                        f"No telemetry received for {max_silence_s}s (Device powered off)"
+                    )
                 continue
 
             if not chunk:
@@ -94,13 +105,18 @@ class BluetoothReceiver:
         if self.log_path:
             log_file = open(self.log_path, "w", newline="")
             csv_writer = csv.writer(log_file)
-            csv_writer.writerow(["time_s", "seq", "pulse_bpm", "btn"] + [f"s{i}" for i in range(SAMPLES_PER_PACKET)])
+            csv_writer.writerow(
+                ["time_s", "seq", "pulse_bpm", "btn"]
+                + [f"s{i}" for i in range(SAMPLES_PER_PACKET)]
+            )
 
         self.log(f"=== Starting Bluetooth Receiver for {self.mac_address} ===")
 
         try:
             while self.stop_event is None or not self.stop_event.is_set():
-                self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+                self.sock = socket.socket(
+                    socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM
+                )
                 self.sock.settimeout(1.0)
 
                 self.log(f"[HOST] Connecting directly to {self.mac_address}...")
@@ -114,15 +130,28 @@ class BluetoothReceiver:
                             continue
 
                         now = time.monotonic()
-                        print(f"  [PKT] Seq: {pkt['sequence']:05d} | BPM: {pkt['bpm']:05.1f} | BTN: {pkt['btn']:02d} | Samples: {len(pkt['samples'])}")
+                        print(
+                            f"  [PKT] Seq: {pkt['sequence']:05d} | BPM: {pkt['bpm']:05.1f} | BTN: {pkt['btn']:02d} | Samples: {len(pkt['samples'])}"
+                        )
 
                         # CSV Logging
                         if csv_writer:
-                            csv_writer.writerow([f"{now - t_start:.3f}", pkt["sequence"], pkt["bpm"], pkt["btn"]] + pkt["samples"])
+                            csv_writer.writerow(
+                                [
+                                    f"{now - t_start:.3f}",
+                                    pkt["sequence"],
+                                    pkt["bpm"],
+                                    pkt["btn"],
+                                ]
+                                + pkt["samples"]
+                            )
                             log_file.flush()
 
                         # Dispatch to GUI
-                        if self.packet_queue is not None and not self.packet_queue.full():
+                        if (
+                            self.packet_queue is not None
+                            and not self.packet_queue.full()
+                        ):
                             self.packet_queue.put(pkt)
 
                 except Exception as e:
@@ -136,5 +165,3 @@ class BluetoothReceiver:
             if log_file:
                 log_file.close()
                 self.log("[HOST] CSV log saved and closed.")
-
-

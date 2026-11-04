@@ -4,6 +4,7 @@ from gui import GUI_System
 import queue
 import threading
 
+
 def run():
     packet_queue = queue.Queue(maxsize=100)
     stop_event = threading.Event()
@@ -13,7 +14,7 @@ def run():
         mac_address="B0:CB:D8:8E:B3:86",
         channel=1,
         packet_queue=packet_queue,
-        stop_event=stop_event
+        stop_event=stop_event,
     )
 
     # Hand receiver.run directly to the background thread
@@ -26,6 +27,7 @@ def run():
     stop_event.set()
     t.join(timeout=1.0)
     print("[SYSTEM] Application shut down cleanly.")
+
 
 if __name__ == "__main__":
     run()

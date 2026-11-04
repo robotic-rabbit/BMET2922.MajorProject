@@ -9,13 +9,13 @@
 
 class Comm {
 public:
-    virtual ~Comm() = default;
+  virtual ~Comm() = default;
 
-    virtual bool begin(const char* deviceName) = 0;
-    virtual void update() = 0;
-    virtual bool isConnected() const = 0;
-    
-    virtual bool sendPacket(const char* str) = 0;
-    virtual bool sendPacket(const uint8_t* buffer, size_t length) = 0;
-    virtual void disconnect() = 0;
+  virtual bool begin(const char *deviceName) = 0;
+  virtual void update() = 0;
+  virtual bool isConnected() const = 0;
+
+  virtual bool sendPacket(const char *str) = 0;
+  virtual bool sendPacket(const uint8_t *buffer, size_t length) = 0;
+  virtual void disconnect() = 0;
 };

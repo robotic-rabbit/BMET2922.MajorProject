@@ -15,11 +15,11 @@ Switch::Switch(uint8_t id, uint8_t threshold = 10)
 **
 */
 {
-  _id        = id;
+  _id = id;
   _threshold = threshold;
-  _state     = false;
-  _changed   = false;
-  _count     = 0;
+  _state = false;
+  _changed = false;
+  _count = 0;
 }
 
 uint8_t Switch::id(void)
@@ -30,11 +30,10 @@ uint8_t Switch::id(void)
   return _id;
 }
 
-bool Switch::changed(void)
-{
-/*
-** Returns whtehr the switch has changed state with the last update.
-*/
+bool Switch::changed(void) {
+  /*
+  ** Returns whtehr the switch has changed state with the last update.
+  */
   return _changed;
 }
 
@@ -53,33 +52,26 @@ bool Switch::update(bool value)
 **
 ** value -  the state read from the physical switch.
 **
-** returns - true if the switch has changed state. 
-**          i.e. the threshold of state mismatches has 
+** returns - true if the switch has changed state.
+**          i.e. the threshold of state mismatches has
 **          been exceeded. Otherwise fale
 */
 {
-  if (value == _state)
-  { // have a match. Decrement counter but only to 0
-    if (_count > 0)
-    {
+  if (value == _state) { // have a match. Decrement counter but only to 0
+    if (_count > 0) {
       _count--;
     }
-  }
-  else
-  {
+  } else {
     // have a mismatch. increment count.
     _count++;
   }
 
-  if (_count >= _threshold)
-  {
+  if (_count >= _threshold) {
     _changed = true;
     _state = !_state;
     _count = 0;
-  }
-  else
+  } else
     _changed = false;
 
   return _changed;
 }
-

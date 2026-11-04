@@ -1,12 +1,18 @@
-import queue
-import time
+"""
+gui.py - Wearable PPG User Interface
+Features dynamic theme toggling (LightGrey2 vs Clinical Obsidian #0a0e17),
+non-blocking telemetry queue drainage, and modular strategy views.
+"""
+
 from collections import deque
 from datetime import datetime
+import queue
+import time
 
 import FreeSimpleGUI as sg
-import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+import numpy as np
 from signal_processing import PPGProcessor
 
 # Pulse rate warning thresholds (BPM)
@@ -25,52 +31,94 @@ PLOT_DURATION = 10
 # GUI event-loop polling interval (milliseconds)
 GUI_CHECK = 100
 
+THEMES = {
+    "light": {
+        "bg": "#EFEFEF",
+        "panel": "#F5F5F5",
+        "text": "#222222",
+        "subtext": "#555555",
+        "grid": "#CCCCCC",
+        "spine": "#AAAAAA",
+        "raw_line": "#EF6381",
+        "filt_line": "#2563EB",
+        "bpm_line": "#EF6381",
+        "lower_thresh": "#2563EB",
+        "upper_thresh": "#E07932",
+        "spectrum_line": "#8B5CF6",
+        "phase_space": "#06B6D4",
+        "status_colors": {
+            "NORMAL": ("#1C663B", "#E6F3ED"),
+            "HIGH": ("#880000", "#F17D80"),
+            "LOW": ("#880000", "#F17D80"),
+            "NO_PULSE": ("#7A5000", "#FFE9B3"),
+            "DISCONNECTED": ("#7A5000", "#FFE9B3"),
+            "WAITING": ("#333333", "#F6F3EA"),
+        },
+    },
+    "dark": {
+        "bg": "#0a0e17",
+        "panel": "#111827",
+        "text": "#F8FAFC",
+        "subtext": "#94A3B8",
+        "grid": "#1E293B",
+        "spine": "#1F2937",
+        "raw_line": "#ff1744",  # Red
+        "filt_line": "#00e5ff",  # Blue/Cyan
+        "bpm_line": "#00ff66",  # Green
+        "lower_thresh": "#00e5ff",  # Blue/Cyan
+        "upper_thresh": "#ffb300",  # Yellow
+        "spectrum_line": "#00e5ff",  # Blue/Cyan
+        "phase_space": "#00e5ff",  # Blue/Cyan
+        "status_colors": {
+            "NORMAL": ("#00ff66", "#042f1a"),
+            "HIGH": ("#ffffff", "#ff1744"),
+            "LOW": ("#ffffff", "#ff1744"),
+            "NO_PULSE": ("#0a0e17", "#ffb300"),
+            "DISCONNECTED": ("#0a0e17", "#ffb300"),
+            "WAITING": ("#00e5ff", "#111827"),
+        },
+    },
+}
 
-class SpectrumView:
-    """Live Frequency Spectrum (FFT) plot for researcher analysis."""
 
-    def setup(self, fig):
-        fig.clear()
-        self.ax = fig.add_subplot(111)
-        (self.line,) = self.ax.plot([], [], color="#8B5CF6", lw=1.5)
-        self.ax.set_title("Real-Time Cardiac Frequency Spectrum (0 - 4 Hz)")
-        self.ax.set_xlabel("Frequency (Hz)")
-        self.ax.set_ylabel("Magnitude (Spectral Power)")
-        self.ax.set_xlim(0.5, 3.5)  # Focus on 30 - 210 BPM band
-        self.ax.grid(alpha=0.3)
-        fig.tight_layout()
-
-    def update(self, gui):
-        if len(gui.filtered_samples) < 5 * SAMPLE_RATE:
-            return
-        x = np.asarray(gui.filtered_samples)
-        x = x - np.mean(x)
-        spec = np.abs(np.fft.rfft(x * np.hanning(len(x)), n=2048))
-        freqs = np.fft.rfftfreq(2048, 1 / SAMPLE_RATE)
-
-        self.line.set_data(freqs, spec)
-        self.ax.set_ylim(0, max(spec[freqs <= 4.0]) * 1.1 + 1e-3)
-
-
+# ==============================================================================
+# MODULAR VIEW STRATEGIES
+# ==============================================================================
 class WaveformView:
-    """Manages the dual-axis Raw and Filtered PPG waveform plots."""
+    """Dual-axis Raw ADC and Filtered PPG waveform plots."""
 
-    def setup(self, fig):
+    def setup(self, fig, theme="light"):
         fig.clear()
-        self.ax_raw = fig.add_subplot(211)
-        self.ax_filt = fig.add_subplot(212, sharex=self.ax_raw)
+        colors = THEMES[theme]
+        fig.patch.set_facecolor(colors["bg"])
 
-        (self.line_raw,) = self.ax_raw.plot([], [], color="#EF6381", lw=1.5)
-        (self.line_filt,) = self.ax_filt.plot([], [], color="#2563EB", lw=1.5)
+        self.ax_raw = fig.add_subplot(211, facecolor=colors["panel"])
+        self.ax_filt = fig.add_subplot(
+            212, sharex=self.ax_raw, facecolor=colors["panel"]
+        )
 
-        self.ax_raw.set_title("Raw PPG Signal")
-        self.ax_raw.set_ylabel("ADC units")
-        self.ax_raw.grid(alpha=0.25)
+        (self.line_raw,) = self.ax_raw.plot([], [], color=colors["raw_line"], lw=1.5)
+        (self.line_filt,) = self.ax_filt.plot([], [], color=colors["filt_line"], lw=1.5)
 
-        self.ax_filt.set_title("Filtered PPG Signal")
-        self.ax_filt.set_ylabel("Amplitude")
-        self.ax_filt.set_xlabel("Time (s)")
-        self.ax_filt.grid(alpha=0.25)
+        for ax in (self.ax_raw, self.ax_filt):
+            ax.tick_params(colors=colors["subtext"], labelsize=8)
+            ax.grid(alpha=0.3, color=colors["grid"], linestyle="--")
+            for spine in ax.spines.values():
+                spine.set_color(colors["spine"])
+
+        self.ax_raw.set_title(
+            "Raw PPG Signal", color=colors["text"], fontsize=9.5, loc="left"
+        )
+        self.ax_raw.set_ylabel("ADC units", color=colors["subtext"], fontsize=8.5)
+
+        self.ax_filt.set_title(
+            "Filtered PPG Signal",
+            color=colors["text"],
+            fontsize=9.5,
+            loc="left",
+        )
+        self.ax_filt.set_ylabel("Amplitude", color=colors["subtext"], fontsize=8.5)
+        self.ax_filt.set_xlabel("Time (s)", color=colors["subtext"], fontsize=8.5)
         fig.tight_layout()
 
     def update(self, gui):
@@ -100,25 +148,55 @@ class WaveformView:
 
 
 class BPMView:
-    """Manages the Heart Rate and Adaptive Threshold plot."""
+    """Heart Rate and Adaptive Threshold trend plot."""
 
-    def setup(self, fig):
+    def setup(self, fig, theme="light"):
         fig.clear()
-        self.ax = fig.add_subplot(111)
+        colors = THEMES[theme]
+        fig.patch.set_facecolor(colors["bg"])
 
-        (self.line_bpm,) = self.ax.plot([], [], color="#EF6381", label="BPM", lw=1.5)
+        self.ax = fig.add_subplot(111, facecolor=colors["panel"])
+
+        (self.line_bpm,) = self.ax.plot(
+            [], [], color=colors["bpm_line"], label="BPM", lw=1.8
+        )
         (self.line_lower,) = self.ax.plot(
-            [], [], "--", color="#2563EB", label="Lower Adaptive Threshold"
+            [],
+            [],
+            "--",
+            color=colors["lower_thresh"],
+            label="Lower Adaptive Threshold",
+            lw=1.2,
         )
         (self.line_upper,) = self.ax.plot(
-            [], [], "--", color="#E07932", label="Upper Adaptive Threshold"
+            [],
+            [],
+            "--",
+            color=colors["upper_thresh"],
+            label="Upper Adaptive Threshold",
+            lw=1.2,
         )
 
-        self.ax.set_title("BPM & Adaptive Thresholds")
-        self.ax.set_ylabel("Heart Rate (BPM)")
-        self.ax.set_xlabel("Time (s)")
-        self.ax.legend(loc="upper right")
-        self.ax.grid(alpha=0.25)
+        self.ax.tick_params(colors=colors["subtext"], labelsize=8)
+        self.ax.grid(alpha=0.3, color=colors["grid"], linestyle="--")
+        for spine in self.ax.spines.values():
+            spine.set_color(colors["spine"])
+
+        self.ax.set_title(
+            "BPM & Adaptive Thresholds",
+            color=colors["text"],
+            fontsize=9.5,
+            loc="left",
+        )
+        self.ax.set_ylabel("Heart Rate (BPM)", color=colors["subtext"], fontsize=8.5)
+        self.ax.set_xlabel("Time (s)", color=colors["subtext"], fontsize=8.5)
+        self.ax.legend(
+            loc="upper right",
+            facecolor=colors["panel"],
+            edgecolor=colors["spine"],
+            labelcolor=colors["text"],
+            fontsize=8,
+        )
         fig.tight_layout()
 
     def update(self, gui):
@@ -135,47 +213,104 @@ class BPMView:
         self.ax.autoscale_view(scalex=False, scaley=True)
 
 
+class SpectrumView:
+    """Real-Time Cardiac Frequency Spectrum (0 - 4.0 Hz / 0 - 240 BPM)."""
+
+    def setup(self, fig, theme="light"):
+        fig.clear()
+        colors = THEMES[theme]
+        fig.patch.set_facecolor(colors["bg"])
+
+        self.ax = fig.add_subplot(111, facecolor=colors["panel"])
+        (self.line,) = self.ax.plot([], [], color=colors["spectrum_line"], lw=1.5)
+        self.ax.set_title(
+            "Real-Time Cardiac Frequency Spectrum",
+            color=colors["text"],
+            fontsize=9.5,
+            loc="left",
+        )
+        self.ax.set_xlabel(
+            "Frequency (Hz)  [ 1.0 Hz = 60 BPM ]",
+            color=colors["subtext"],
+            fontsize=8.5,
+        )
+        self.ax.set_ylabel(
+            "Magnitude (Spectral Power)",
+            color=colors["subtext"],
+            fontsize=8.5,
+        )
+        self.ax.set_xlim(0.0, 4.0)
+
+        self.ax.tick_params(colors=colors["subtext"], labelsize=8)
+        self.ax.grid(alpha=0.3, color=colors["grid"], linestyle="--")
+        for spine in self.ax.spines.values():
+            spine.set_color(colors["spine"])
+
+        fig.tight_layout()
+
+    def update(self, gui):
+        if len(gui.filtered_samples) < 5 * SAMPLE_RATE:
+            return
+        x = np.asarray(gui.filtered_samples)
+        x = x - np.mean(x)
+        spec = np.abs(np.fft.rfft(x * np.hanning(len(x)), n=2048))
+        freqs = np.fft.rfftfreq(2048, 1 / SAMPLE_RATE)
+
+        mask = freqs <= 4.0
+        self.line.set_data(freqs[mask], spec[mask])
+        max_power = np.max(spec[mask]) if np.any(mask) else 1.0
+        self.ax.set_ylim(0, max_power * 1.15 + 1e-3)
+
+
 class PhaseSpaceView:
-    """
-    Reconstructs the 2D Phase Space Attractor of the cardiac cycle
-    using Time-Delay Embedding (Takens' Theorem): x(t) vs x(t - tau).
-    """
+    """2D Cardiac Limit-Cycle Attractor via Takens' Time-Delay Embedding."""
 
     def __init__(self, delay_samples=7):
         self.tau = delay_samples  # 7 samples @ 50Hz = 140 ms delay
 
-    def setup(self, fig):
+    def setup(self, fig, theme="light"):
         fig.clear()
-        self.ax = fig.add_subplot(111)
+        colors = THEMES[theme]
+        fig.patch.set_facecolor(colors["bg"])
 
-        # Plot line for the phase portrait
-        (self.line,) = self.ax.plot([], [], color="#06B6D4", lw=1.2, alpha=0.85)
+        self.ax = fig.add_subplot(111, facecolor=colors["panel"])
+        (self.line,) = self.ax.plot(
+            [], [], color=colors["phase_space"], lw=1.2, alpha=0.9
+        )
+
+        self.ax.tick_params(colors=colors["subtext"], labelsize=8)
+        self.ax.grid(alpha=0.3, color=colors["grid"], linestyle="--")
+        for spine in self.ax.spines.values():
+            spine.set_color(colors["spine"])
 
         self.ax.set_title(
-            r"Cardiac Phase-Space Attractor: $x(t)$ vs $x(t - \tau)$", fontsize=11
+            r"Cardiac Phase-Space Attractor: $x(t)$ vs $x(t - \tau)$",
+            color=colors["text"],
+            fontsize=10,
+            loc="left",
         )
-        self.ax.set_xlabel(r"$x(t - \tau)$ (Delayed Signal)", fontsize=9)
-        self.ax.set_ylabel(r"$x(t)$ (Current Signal)", fontsize=9)
-        self.ax.grid(alpha=0.25)
+        self.ax.set_xlabel(
+            r"$x(t - \tau)$ (Delayed Signal)",
+            color=colors["subtext"],
+            fontsize=8.5,
+        )
+        self.ax.set_ylabel(
+            r"$x(t)$ (Current Signal)", color=colors["subtext"], fontsize=8.5
+        )
         fig.tight_layout()
 
     def update(self, gui):
-        # We need at least a few seconds of data to trace the attractor loops
         if len(gui.filtered_samples) < 2 * SAMPLE_RATE:
             return
 
-        # Take the most recent ~4 seconds of filtered samples for a clear trajectory
         recent_window = 4 * SAMPLE_RATE
         raw_filt = list(gui.filtered_samples)[-recent_window:]
 
-        # Create time-delay vectors: x(t) vs x(t - tau)
         x_delayed = np.array(raw_filt[: -self.tau])
         x_current = np.array(raw_filt[self.tau :])
 
-        # Update the attractor trajectory
         self.line.set_data(x_delayed, x_current)
 
-        # Dynamic scaling to keep the attractor centered in the frame
         all_vals = np.concatenate([x_delayed, x_current])
         v_min, v_max = np.min(all_vals), np.max(all_vals)
         pad = max((v_max - v_min) * 0.15, 1.0)
@@ -184,19 +319,19 @@ class PhaseSpaceView:
         self.ax.set_ylim(v_min - pad, v_max + pad)
 
 
+# ==============================================================================
+# MAIN USER INTERFACE CONTROLLER
+# ==============================================================================
 class GUI_System:
     def __init__(self):
         sg.theme("LightGrey2")
+        self.current_theme = "light"
+
         self.fig = Figure(figsize=(7.3, 4.1), dpi=100)
-        # self.ax = self.fig.add_subplot(111)
-        self.times = deque(
-            maxlen=SAMPLE_RATE * PLOT_DURATION
-        )  # deque for storing PPG times
-        self.samples = deque(
-            maxlen=SAMPLE_RATE * PLOT_DURATION
-        )  # deque for storing PPG readings
-        self.bpm_times = deque(maxlen=180)  # deque for storing BPM times
-        self.bpm = deque(maxlen=180)  # deque for storing BPM data
+        self.times = deque(maxlen=SAMPLE_RATE * PLOT_DURATION)
+        self.samples = deque(maxlen=SAMPLE_RATE * PLOT_DURATION)
+        self.bpm_times = deque(maxlen=180)
+        self.bpm = deque(maxlen=180)
         self.last_packet = None
         self.last_sequence = None
         self.status = "WAITING"
@@ -207,7 +342,8 @@ class GUI_System:
         self.filtered_samples = deque(maxlen=SAMPLE_RATE * PLOT_DURATION)
         self.lower_thresholds = deque(maxlen=180)
         self.upper_thresholds = deque(maxlen=180)
-        self.time = time.monotonic()
+        self.total_samples = 0
+        self.last_adaptive_status = None
 
         self.views = {
             "Pulse Waveform": WaveformView(),
@@ -217,25 +353,34 @@ class GUI_System:
         }
 
         self.current_view = self.views["Pulse Waveform"]
-        self.current_view.setup(self.fig)
-        self.last_adaptive_status = None
+        self.current_view.setup(self.fig, theme=self.current_theme)
+
         left = [
             [sg.Canvas(key="-CANVAS-", size=(720, 400))],
             [
-                sg.Text("Graph Selection:"),
-                sg.ButtonMenu(
-                    "Select Graph",
+                sg.Column(
                     [
-                        "Graphs",
                         [
-                            "Pulse Waveform",
-                            "BPM",
-                            "Frequency Spectrum",
-                            "Chaos Control",
-                        ],
+                            sg.Text("Graph Selection:", key="-LBL-GRAPH-"),
+                            sg.ButtonMenu(
+                                "Select Graph",
+                                [
+                                    "Graphs",
+                                    [
+                                        "Pulse Waveform",
+                                        "BPM",
+                                        "Frequency Spectrum",
+                                        "Chaos Control",
+                                    ],
+                                ],
+                                key="-GRAPH-",
+                            ),
+                            sg.Button("🌙 Dark Mode", key="-THEME-BTN-", size=(12, 1)),
+                        ]
                     ],
-                    key="-GRAPH-",
-                ),
+                    key="-BOT-BAR-",
+                    pad=(0, 0),
+                )
             ],
         ]
         right = [
@@ -257,10 +402,14 @@ class GUI_System:
                     expand_x=True,
                 )
             ],
-            [sg.Text("System Log:", font=("Arial", 12, "bold"))],
+            [sg.Text("System Log:", key="-LBL-LOG-", font=("Arial", 12, "bold"))],
             [
                 sg.Multiline(
-                    "", key="-LOG-", size=(35, 13), disabled=True, autoscroll=True
+                    "",
+                    key="-LOG-",
+                    size=(35, 13),
+                    disabled=True,
+                    autoscroll=True,
                 )
             ],
         ]
@@ -268,7 +417,9 @@ class GUI_System:
             [sg.Column(left, key="-LEFT-"), sg.Column(right, key="-RIGHT-")],
             [
                 sg.Text(
-                    "Waiting for Bluetooth packets", key="-CONNECTION-", expand_x=True
+                    "Waiting for Bluetooth packets",
+                    key="-CONNECTION-",
+                    expand_x=True,
                 )
             ],
         ]
@@ -279,9 +430,76 @@ class GUI_System:
         self.canvas = FigureCanvasTkAgg(self.fig, self.window["-CANVAS-"].TKCanvas)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        self.total_samples = 0
-
         self.log("GUI started")
+
+    def toggle_theme(self):
+        """Swaps between LightGrey2 and Presentation Dark Mode (#0a0e17)."""
+        self.current_theme = "dark" if self.current_theme == "light" else "light"
+        t = THEMES[self.current_theme]
+
+        # 1. Update Button Labels & Colors
+        btn_text = "☀️ Light Mode" if self.current_theme == "dark" else "🌙 Dark Mode"
+        self.window["-THEME-BTN-"].update(btn_text)
+        self.window["-THEME-BTN-"].Widget.configure(
+            bg=t["panel"],
+            fg=t["text"],
+            activebackground=t["grid"],
+            activeforeground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["spine"],
+        )
+        self.window["-GRAPH-"].Widget.configure(
+            bg=t["panel"],
+            fg=t["text"],
+            activebackground=t["grid"],
+            activeforeground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["spine"],
+        )
+
+        # 2. Recursively paint all Tkinter frames, columns, and parent containers
+        def paint_widget(w):
+            w_class = w.winfo_class()
+            # Only color background containers, not interactive data displays
+            if w_class in ("Frame", "Labelframe", "Toplevel", "Tk"):
+                w.configure(bg=t["bg"])
+            elif w_class == "Label" and w not in (
+                self.window["-STATUS-"].Widget,
+                self.window["-BPM-"].Widget,
+            ):
+                w.configure(bg=t["bg"], fg=t["text"])
+            for child in w.winfo_children():
+                paint_widget(child)
+
+        paint_widget(self.window.TKroot)
+
+        # 3. Canvas & Container Backgrounds
+        self.window.TKroot.configure(bg=t["bg"])
+        self.window["-CANVAS-"].TKCanvas.configure(bg=t["bg"], highlightthickness=0)
+        self.window["-BOT-BAR-"].Widget.configure(bg=t["bg"])
+
+        # 4. Text Boxes & Event Log Window
+        self.window["-LBL-LOG-"].Widget.configure(bg=t["bg"], fg=t["text"])
+        self.window["-CONNECTION-"].Widget.configure(bg=t["bg"], fg=t["subtext"])
+        self.window["-LOG-"].Widget.configure(
+            bg=t["panel"],
+            fg=t["text"],
+            insertbackground=t["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=t["spine"],
+        )
+
+        # 5. Re-apply status badge with active theme colors
+        curr_status = self.status
+        self.status = None
+        self.set_status(curr_status)
+
+        # 6. Re-render Matplotlib figure with new theme
+        self.current_view.setup(self.fig, theme=self.current_theme)
+        self.canvas.draw_idle()
 
     def check_watchdog(self):
         """Reset state if telemetry drops out."""
@@ -302,10 +520,10 @@ class GUI_System:
                 self.set_status("DISCONNECTED")
 
     def set_graph_view(self, view_name):
-        """Switches the active plotting strategy"""
+        """Switches the active plotting strategy."""
         if view_name in self.views and self.views[view_name] != self.current_view:
             self.current_view = self.views[view_name]
-            self.current_view.setup(self.fig)
+            self.current_view.setup(self.fig, theme=self.current_theme)
             self.canvas.draw_idle()
 
     def log(self, message):
@@ -324,20 +542,15 @@ class GUI_System:
             "DISCONNECTED": "System Disconnected",
             "WAITING": "Waiting for data",
         }
-        self.log(messages[status])
-        colors = {
-            "NORMAL": ("#1C663B", "#E6F3ED"),
-            "HIGH": ("#880000", "#F17D80"),
-            "LOW": ("#880000", "#F17D80"),
-            "NO_PULSE": ("#7A5000", "#FFE9B3"),
-            "DISCONNECTED": ("#7A5000", "#FFE9B3"),
-            "WAITING": ("#333333", "#F6F3EA"),
-        }
-        fg, bg = colors[status]
+        self.log(messages.get(status, status))
+
+        colors = THEMES[self.current_theme]["status_colors"]
+        fg, bg = colors.get(status)
+
         self.window["-STATUS-"].update(
-            messages[status], text_color=fg, background_color=bg
+            messages.get(status, status), text_color=fg, background_color=bg
         )
-        self.window["-BPM-"].update(background_color=bg)
+        self.window["-BPM-"].update(background_color=bg, text_color=fg)
         if status == "DISCONNECTED":
             self.window["-BPM-"].update("---")
             self.window["-CONNECTION-"].update("SYSTEM DISCONNECTED — Reconnecting...")
@@ -347,16 +560,22 @@ class GUI_System:
             )
 
     def on_packet(self, packet):
-        result = self.processor.process_packet(packet)
+        # 1. Forward raw host-level notifications (e.g. socket status)
         if "log_msg" in packet:
             self.log(packet["log_msg"])
             return
 
-        for event_msg in result["events"]:
+        # 2. Run signal processing
+        result = self.processor.process_packet(packet)
+        if result is None or result.get("adaptive_status") == "IGNORED":
+            return
+
+        for event_msg in result.get("events", []):
             self.log(event_msg)
 
         self.last_packet = time.monotonic()
 
+        # 3. Monotonic sample clock (prevents time-warp glitching)
         for s in packet["samples"]:
             t = self.total_samples / SAMPLE_RATE
             self.times.append(t)
@@ -380,15 +599,10 @@ class GUI_System:
             self.set_status(result["fixed_status"])
 
     def refresh(self):
-        """Fast render tick: checks timeouts and delegates drawing to the active view."""
-        # self.time = time.monotonic()
+        """Fast render tick: checks timeouts and delegates drawing to active view."""
         self.check_watchdog()
-
-        # Delegate drawing to whatever view is currently active
         self.current_view.update(self)
-
         self.canvas.draw_idle()
-        # self.log(time.monotonic()-self.time)
 
     def run(self, packet_queue=None):
         next_refresh = time.monotonic()
@@ -399,7 +613,10 @@ class GUI_System:
                     break
                 if event == "-GRAPH-":
                     self.set_graph_view(values["-GRAPH-"])
+                if event == "-THEME-BTN-":
+                    self.toggle_theme()
 
+                # Non-blocking queue drain
                 if packet_queue is not None:
                     while not packet_queue.empty():
                         try:

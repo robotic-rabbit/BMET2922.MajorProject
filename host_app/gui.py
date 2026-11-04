@@ -1,17 +1,13 @@
-import FreeSimpleGUI as sg
 import queue
 import time
-import serial
-import threading
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import tkinter as tk
 from collections import deque
 from datetime import datetime
-from signal_processing import PPGProcessor
 
+import FreeSimpleGUI as sg
+import numpy as np
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from signal_processing import PPGProcessor
 
 # Pulse rate warning thresholds (BPM)
 LOW_BPM = 50

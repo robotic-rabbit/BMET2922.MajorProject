@@ -4,15 +4,15 @@ Features dynamic theme toggling (LightGrey2 vs Clinical Obsidian #0a0e17),
 non-blocking telemetry queue drainage, and modular strategy views.
 """
 
-from collections import deque
-from datetime import datetime
 import queue
 import time
+from collections import deque
+from datetime import datetime
 
 import FreeSimpleGUI as sg
+import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-import numpy as np
 from signal_processing import PPGProcessor
 
 # Pulse rate warning thresholds (BPM)
@@ -81,9 +81,6 @@ THEMES = {
 }
 
 
-# ==============================================================================
-# MODULAR VIEW STRATEGIES
-# ==============================================================================
 class WaveformView:
     """Dual-axis Raw ADC and Filtered PPG waveform plots."""
 
@@ -319,9 +316,6 @@ class PhaseSpaceView:
         self.ax.set_ylim(v_min - pad, v_max + pad)
 
 
-# ==============================================================================
-# MAIN USER INTERFACE CONTROLLER
-# ==============================================================================
 class GUI_System:
     def __init__(self):
         sg.theme("LightGrey2")

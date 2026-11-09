@@ -211,7 +211,7 @@ class BPMView:
 
 
 class SpectrumView:
-    """Real-Time Cardiac Frequency Spectrum (0 - 4.0 Hz / 0 - 240 BPM)."""
+    """Real-Time Cardiac Frequency Spectrum (0 - 8.0 Hz) ."""
 
     def setup(self, fig, theme="light"):
         fig.clear()
@@ -236,7 +236,7 @@ class SpectrumView:
             color=colors["subtext"],
             fontsize=8.5,
         )
-        self.ax.set_xlim(0.0, 4.0)
+        self.ax.set_xlim(0.0, 8.0)
 
         self.ax.tick_params(colors=colors["subtext"], labelsize=8)
         self.ax.grid(alpha=0.3, color=colors["grid"], linestyle="--")
@@ -253,7 +253,7 @@ class SpectrumView:
         spec = np.abs(np.fft.rfft(x * np.hanning(len(x)), n=2048))
         freqs = np.fft.rfftfreq(2048, 1 / SAMPLE_RATE)
 
-        mask = freqs <= 4.0
+        mask = freqs <= 8.0
         self.line.set_data(freqs[mask], spec[mask])
         max_power = np.max(spec[mask]) if np.any(mask) else 1.0
         self.ax.set_ylim(0, max_power * 1.15 + 1e-3)
